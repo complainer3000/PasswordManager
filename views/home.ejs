@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Manager Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            font-size: 2em;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        h2 {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+        form {
+            margin-bottom: 30px;
+        }
+        input[type="text"], input[type="password"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="submit"], button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+        input[type="submit"]:hover, button:hover {
+            background-color: #45a049;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        ul li {
+            background-color: #f9f9f9;
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 5px solid #4CAF50;
+        }
+        ul li span {
+            font-weight: bold;
+        }
+        a {
+            color: #4CAF50;
+            text-decoration: none;
+            font-size: 1em;
+            display: inline-block;
+            margin-top: 20px;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .password-field {
+            display: none;
+        }
+        .show-password, .copy-password {
+            background-color: #008CBA;
+            margin-left: 5px;
+        }
+        .copy-password {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to your Password Manager, <%= user.username %>!</h1>
+        
+        <h2>Add New Login Credentials</h2>
+        <form action="/add-credentials" method="POST">
+            <input type="text" name="site" placeholder="Site (e.g. facebook.com)" required>
+            <input type="text" name="username" placeholder="Username or Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="button" id="generatePassword">Generate Random Password</button>
+            <input type="submit" value="Add Credentials">
+        </form>
+
+        <h2>Change Your Password</h2>
+        <form action="/change-password" method="POST">
+            <input type="password" name="currentPassword" placeholder="Current Password" required>
+            <input type="password" name="newPassword" placeholder="New Password" required>
+            <button type="button" id="generateNewPassword">Generate Random Password</button>
+            <input type="submit" value="Change Password">
+        </form>
+
+        <h2>Your Stored Credentials:</h2>
+        <ul>
+            <% passwords.forEach(function(pw) { %>
+                <li data-password="<%= pw.password %>">
+                    <span>Site:</span> <%= pw.website %> | 
+                    <span>Username/Email:</span> <%= pw.username %> | 
+                    <span>Password:</span> 
+                    <span class="password-field">*********</span>
+                    <button class="show-password">Show</button>
+                    <button class="copy-password">Copy</button>
+                </li>
+            <% }); %>
+        </ul>
+
+        <a href="/logout">Logout</a>
+    </div>
+
+    <script>
+        document.querySelectorAll('.show-password').forEach(button => {
+            button.addEventListener('click', function() {
+                const passwordField = this.closest('li').querySelector('.password-field');
+                const copyButton = this.nextElementSibling;
+                const actualPassword = this.closest('li').dataset.password;
+
+                if (passwordField.textContent === '*********') {
+                    passwordField.textContent = actualPassword;
+                    copyButton.style.display = 'inline';
+                    this.textContent = 'Hide';
+                } else {
+                    passwordField.textContent = '*********';
+                    copyButton.style.display = 'none';
+                    this.textContent = 'Show';
+                }
+            });
+        });
+
+        document.querySelectorAll('.copy-password').forEach(button => {
+            button.addEventListener('click', function() {
+                const actualPassword = this.closest('li').dataset.password;
+                navigator.clipboard.writeText(actualPassword)
+                    .then(() => alert('Password copied to clipboard'))
+                    .catch(err => console.error('Failed to copy: ', err));
+            });
+        });
+
+        function generatePassword() {
+            fetch('/generate-password')
+                .then(response => response.json())
+                .then(data => {
+                    document.querySelector('input[name="password"]').value = data.password;
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        document.getElementById('generatePassword').addEventListener('click', generatePassword);
+        document.getElementById('generateNewPassword').addEventListener('click', function() {
+            generatePassword();
+            document.querySelector('input[name="newPassword"]').value = document.querySelector('input[name="password"]').value;
+        });
+    </script>
+</body>
+</html>
