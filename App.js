@@ -10,6 +10,8 @@ const validator = require('validator');
 const app = express();
 const port = 3000;
 
+app.use(express.static(__dirname + '/public'));
+
 // Set up the database
 const db = new sqlite3.Database('./passwords.db');
 

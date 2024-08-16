@@ -4,92 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Password Manager Dashboard</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            font-size: 2em;
-            color: #4CAF50;
-            margin-bottom: 20px;
-        }
-        h2 {
-            font-size: 1.5em;
-            color: #333;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #4CAF50;
-            padding-bottom: 5px;
-        }
-        form {
-            margin-bottom: 30px;
-        }
-        input[type="text"], input[type="password"] {
-            width: calc(100% - 22px);
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        input[type="submit"], button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1em;
-            transition: background-color 0.3s ease;
-        }
-        input[type="submit"]:hover, button:hover {
-            background-color: #45a049;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        ul li {
-            background-color: #f9f9f9;
-            margin: 5px 0;
-            padding: 10px;
-            border-radius: 4px;
-            border-left: 5px solid #4CAF50;
-        }
-        ul li span {
-            font-weight: bold;
-        }
-        a {
-            color: #4CAF50;
-            text-decoration: none;
-            font-size: 1em;
-            display: inline-block;
-            margin-top: 20px;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-        .password-field {
-            display: none;
-        }
-        .show-password, .copy-password {
-            background-color: #008CBA;
-            margin-left: 5px;
-        }
-        .copy-password {
-            display: none;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
@@ -103,51 +18,42 @@
             <button type="button" id="generatePassword">Generate Random Password</button>
             <input type="submit" value="Add Credentials">
         </form>
-
-        <h2>Change Your Password</h2>
-        <form action="/change-password" method="POST">
-            <input type="password" name="currentPassword" placeholder="Current Password" required>
-            <input type="password" name="newPassword" placeholder="New Password" required>
-            <button type="button" id="generateNewPassword">Generate Random Password</button>
-            <input type="submit" value="Change Password">
-        </form>
-
+    
         <h2>Your Stored Credentials:</h2>
         <ul>
             <% passwords.forEach(function(pw) { %>
-                <li data-password="<%= pw.password %>">
-                    <span>Site:</span> <%= pw.website %> | 
-                    <span>Username/Email:</span> <%= pw.username %> | 
-                    <span>Password:</span> 
-                    <span class="password-field">*********</span>
-                    <button class="show-password">Show</button>
-                    <button class="copy-password">Copy</button>
+                <li data-password="<%= pw.password %>" data-id="<%= pw.id %>">
+                    <span class="credential-label">Site:</span>
+                    <span class="credential-value site"><%= pw.website %></span> | 
+                    <span class="credential-label">Username/Email:</span>
+                    <span class="credential-value username"><%= pw.username %></span> 
+                    <button class="edit-credential">Edit</button>
+                    <button class="copy-password">Copy Password</button>
                 </li>
             <% }); %>
         </ul>
-
+    
         <a href="/logout">Logout</a>
     </div>
-
-    <script>
-        document.querySelectorAll('.show-password').forEach(button => {
-            button.addEventListener('click', function() {
-                const passwordField = this.closest('li').querySelector('.password-field');
-                const copyButton = this.nextElementSibling;
-                const actualPassword = this.closest('li').dataset.password;
-
-                if (passwordField.textContent === '*********') {
-                    passwordField.textContent = actualPassword;
-                    copyButton.style.display = 'inline';
-                    this.textContent = 'Hide';
-                } else {
-                    passwordField.textContent = '*********';
-                    copyButton.style.display = 'none';
-                    this.textContent = 'Show';
-                }
-            });
-        });
-
+    
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Edit Credential</h2>
+            <form id="editCredentialForm">
+                <input type="hidden" id="editId" name="id">
+                <input type="text" id="editSite" name="site" placeholder="Site" required>
+                <input type="text" id="editUsername" name="username" placeholder="Username or Email" required>
+                <div class="password-container">
+                    <input type="password" id="editPassword" name="password" placeholder="Password" required>
+                    <span class="eye-icon" onclick="togglePasswordVisibility(this)">👁️</span>
+                </div>
+                <button type="button" id="generateEditPassword">Generate Random Password</button>
+                <button type="submit">Save Changes</button>
+            </form>
+        </div>
+    </div>
+    <script>    
         document.querySelectorAll('.copy-password').forEach(button => {
             button.addEventListener('click', function() {
                 const actualPassword = this.closest('li').dataset.password;
@@ -156,21 +62,83 @@
                     .catch(err => console.error('Failed to copy: ', err));
             });
         });
+    
+        function generatePassword(inputElement) {
+        fetch('/generate-password')
+            .then(response => response.json())
+            .then(data => {
+                inputElement.value = data.password;
+            })
+            .catch(error => console.error('Error:', error));
+    }
 
-        function generatePassword() {
-            fetch('/generate-password')
-                .then(response => response.json())
-                .then(data => {
-                    document.querySelector('input[name="password"]').value = data.password;
-                })
-                .catch(error => console.error('Error:', error));
-        }
+    document.getElementById('generatePassword').addEventListener('click', function() {
+        generatePassword(document.querySelector('input[name="password"]'));
+    });
 
-        document.getElementById('generatePassword').addEventListener('click', generatePassword);
-        document.getElementById('generateNewPassword').addEventListener('click', function() {
-            generatePassword();
-            document.querySelector('input[name="newPassword"]').value = document.querySelector('input[name="password"]').value;
+    const modal = document.getElementById('editModal');
+    const closeBtn = document.getElementsByClassName('close')[0];
+    const editForm = document.getElementById('editCredentialForm');
+
+    document.querySelectorAll('.edit-credential').forEach(button => {
+        button.addEventListener('click', function() {
+            const li = this.closest('li');
+            const id = li.dataset.id;
+            const site = li.querySelector('.credential-value.site').textContent.trim();
+            const username = li.querySelector('.credential-value.username').textContent.trim();
+            const password = li.dataset.password;
+
+            document.getElementById('editId').value = id;
+            document.getElementById('editSite').value = site;
+            document.getElementById('editUsername').value = username;
+            document.getElementById('editPassword').value = password;
+
+            modal.style.display = 'block';
         });
+    });
+
+    document.getElementById('generateEditPassword').addEventListener('click', function() {
+        generatePassword(document.getElementById('editPassword'));
+    });
+
+    closeBtn.onclick = function() {
+        modal.style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        if (event.target == modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    editForm.onsubmit = function(e) {
+        e.preventDefault();
+        const formData = new FormData(editForm);
+        fetch('/edit-credential', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Failed to update credential');
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+
+    function togglePasswordVisibility(icon) {
+        const input = icon.previousElementSibling;
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.textContent = '🙈';
+        } else {
+            input.type = 'password';
+            icon.textContent = '👁️';
+        }
+    }
     </script>
 </body>
 </html>
