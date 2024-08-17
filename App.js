@@ -7,6 +7,7 @@ const bcrypt = require('bcrypt');
 const CryptoJS = require('crypto-js');
 const { body, validationResult } = require('express-validator');
 const validator = require('validator');
+const crypto = require('crypto');
 const app = express();
 const port = 3000;
 
@@ -64,6 +65,18 @@ const sanitizeInputs = (req, res, next) => {
 };
 
 app.use(sanitizeInputs);
+
+// Middleware to check token
+const checkToken = (req, res, next) => {
+  if (!req.session.user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  const providedToken = req.body.token || req.query.token;
+  if (providedToken !== req.session.user.token) {
+    return res.status(403).json({ success: false, message: 'Invalid token' });
+  }
+  next();
+};
 
 // Password strength check
 function isPasswordStrong(password) {
@@ -126,7 +139,9 @@ app.post('/login', [
     }
     bcrypt.compare(password, user.password, (err, result) => {
       if (result) {
-        req.session.user = { id: user.id, username: user.username, email: user.email };
+        const token = crypto.randomBytes(32).toString('hex');
+        req.session.user = { id: user.id, username: user.username, email: user.email, token: token };
+        console.log('User logged in:', req.session.user);
         res.redirect('/');
       } else {
         res.status(400).send('Incorrect password');
@@ -169,7 +184,37 @@ app.post('/register', [
   });
 });
 
-app.post('/add-credentials', [
+app.post('/add-credentials', checkToken, [
+  body('site').notEmpty().trim().escape(),
+  body('username').notEmpty().trim().escape(),
+  body('password').notEmpty(),
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('Validation errors:', errors.array());
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { site, username, password } = req.body;
+  const encryptedPassword = CryptoJS.AES.encrypt(password, encryptionKey).toString();
+  
+  console.log('Adding credential for user:', req.session.user.id);
+  
+  db.run('INSERT INTO passwords (user_id, website, username, password) VALUES (?, ?, ?, ?)',
+    [req.session.user.id, site, username, encryptedPassword],
+    function(err) {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ success: false, message: 'Error occurred' });
+      }
+      console.log('Credential added, rows affected:', this.changes);
+      res.json({ success: true });
+    }
+  );
+});
+
+app.post('/edit-credential', checkToken, [
+  body('id').isInt(),
   body('site').notEmpty().trim().escape(),
   body('username').notEmpty().trim().escape(),
   body('password').notEmpty(),
@@ -179,24 +224,42 @@ app.post('/add-credentials', [
     return res.status(400).json({ errors: errors.array() });
   }
 
-  if (!req.session.user) {
-    return res.status(401).send('Unauthorized');
-  }
-  const { site, username, password } = req.body;
+  const { id, site, username, password } = req.body;
   const encryptedPassword = CryptoJS.AES.encrypt(password, encryptionKey).toString();
-  
-  db.run('INSERT INTO passwords (user_id, website, username, password) VALUES (?, ?, ?, ?)',
-    [req.session.user.id, site, username, encryptedPassword],
+
+  db.run('UPDATE passwords SET website = ?, username = ?, password = ? WHERE id = ? AND user_id = ?',
+    [site, username, encryptedPassword, id, req.session.user.id],
     (err) => {
       if (err) {
-        return res.status(500).send('Error occurred');
+        return res.status(500).json({ success: false, message: 'Error occurred' });
       }
-      res.redirect('/');
+      res.json({ success: true });
     }
   );
 });
 
-app.post('/change-password', [
+app.post('/remove-credential', checkToken, [
+  body('id').isInt(),
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { id } = req.body;
+
+  db.run('DELETE FROM passwords WHERE id = ? AND user_id = ?',
+    [id, req.session.user.id],
+    (err) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: 'Error occurred' });
+      }
+      res.json({ success: true });
+    }
+  );
+});
+
+app.post('/change-password', checkToken, [
   body('currentPassword').notEmpty(),
   body('newPassword').custom(value => {
     if (!isPasswordStrong(value)) {
@@ -208,10 +271,6 @@ app.post('/change-password', [
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
-  }
-
-  if (!req.session.user) {
-    return res.status(401).send('Unauthorized');
   }
   
   const { currentPassword, newPassword } = req.body;
@@ -239,6 +298,34 @@ app.post('/change-password', [
       }
     });
   });
+});
+
+app.post('/remove-credential', checkToken, [
+  body('id').isInt(),
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('Validation errors:', errors.array());
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  const { id } = req.body;
+  console.log('Removing credential:', id, 'for user:', req.session.user.id);
+
+  db.run('DELETE FROM passwords WHERE id = ? AND user_id = ?',
+    [id, req.session.user.id],
+    function(err) {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ success: false, message: 'Error occurred' });
+      }
+      console.log('Rows affected:', this.changes);
+      if (this.changes === 0) {
+        return res.status(404).json({ success: false, message: 'Credential not found or not owned by user' });
+      }
+      res.json({ success: true });
+    }
+  );
 });
 
 app.get('/logout', (req, res) => {
