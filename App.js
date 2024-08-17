@@ -141,10 +141,9 @@ app.post('/login', [
       if (result) {
         const token = crypto.randomBytes(32).toString('hex');
         req.session.user = { id: user.id, username: user.username, email: user.email, token: token };
-        console.log('User logged in:', req.session.user);
-        res.redirect('/');
+        res.json({ success: true, token: token }); // Send token to client
       } else {
-        res.status(400).send('Incorrect password');
+        res.status(400).json({ success: false, message: 'Invalid credentials' });
       }
     });
   });
